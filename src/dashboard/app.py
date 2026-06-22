@@ -34,6 +34,8 @@ if str(ROOT) not in sys.path:
 
 from config.settings import DB_PATH, CARBON_HIGH_THRESHOLD, CARBON_LOW_THRESHOLD
 from src.carbon_scheduler import classify_carbon_zone, get_recommendation
+from src.optimization.recommender import DynamicRecommender
+from src.knowledge_graph import SemanticGraph, BatchForensics, EvidenceRecommender
 
 # ─── Page config (must be first Streamlit call) ───────────────────────────────
 st.set_page_config(
@@ -247,6 +249,8 @@ _RED     = "#ff4b4b"
 _PURPLE  = "#a855f7"
 _ORANGE  = "#f97316"
 
+# Demo carbon intensity profile (gCO2/kWh) - 24 hourly values
+# Replace with real grid data from carbon scheduler in production
 CARBON_24H = [120, 100, 85, 75, 70, 65, 60, 55, 50, 55, 65, 80,
               100, 130, 160, 200, 260, 320, 420, 500, 460, 380, 280, 180]
 
@@ -573,8 +577,8 @@ st.markdown(
     '<div>'
     '<span class="hbadge">Phase 9</span>'
     '<span class="hbadge hbadge-green">● Live</span>'
-    f'<span class="hbadge">2,000 Batches</span>'
-    f'<span class="hbadge">100 Pareto Solutions</span>'
+    f'<span class="hbadge">{len(df_batches):,} Batches</span>'
+    f'<span class="hbadge">⚖️ Pareto Solutions</span>'
     f'<span class="hbadge {badge_zone_cls}">{ZONE_EMOJI[zone]} {zone} Zone</span>'
     '</div></div>'
     f'<div style="text-align:right;font-size:0.73rem;color:rgba(255,255,255,0.3);padding-top:4px;">'
@@ -585,7 +589,7 @@ st.markdown(
 )
 
 # ─── Tabs ─────────────────────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
     "🎛️  Command Center",
     "📈  Production Analytics",
     "⚖️  Pareto Intelligence",
@@ -594,6 +598,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "🤖  Digital Twin",
     "📡  ESP32 Real-Time",
     "⚡  Optimization Insights",
+    "🔬 Track A Forensics",
 ])
 
 
@@ -1533,11 +1538,11 @@ with tab6:
         if st.button("+ Simulate New Batch", key="dt_sim_batch",
                      help="Insert a new simulated batch into the DB and refresh"):
             import random as _rnd
-            _sim_conn = sqlite3.connect(DB_PATH)
-            _last_id  = _sim_conn.execute(
-                "SELECT batch_id FROM batches ORDER BY rowid DESC LIMIT 1"
-            ).fetchone()
-            _next_num = int(_last_id[0].split("_")[1]) + 1 if _last_id else 2000
+            with sqlite3.connect(DB_PATH) as _sim_conn:
+                _last_id  = _sim_conn.execute(
+                    "SELECT batch_id FROM batches ORDER BY rowid DESC LIMIT 1"
+                ).fetchone()
+                _next_num = int(_last_id[0].split("_")[1]) + 1 if _last_id else 2000
             _new_id   = f"BATCH_{_next_num}"
             _sim_conn.execute(
                 """INSERT INTO batches
@@ -2603,338 +2608,273 @@ with tab8:
         '<p>AI-Driven Recommendations Based on Real-Time ESP32 Data</p>'
         '<div>'
         '<span class="hbadge">🔍 Analysis</span>'
-        '<span class="hbadge hbadge-green">💡 Recommendations</span>'
+        '<span class="hbadge hbadge-green">💡 Dynamic Recommendations</span>'
         '<span class="hbadge">💰 ROI</span>'
         '</div></div>'
         '</div></div>',
         unsafe_allow_html=True,
     )
 
-    # Get latest ESP32 data
+    # Initialize recommender
+    if "recommender" not in st.session_state:
+        st.session_state.recommender = DynamicRecommender()
+    
+    recommender = st.session_state.recommender
+    
+    # Get latest ESP32 data — fetch directly from server if not in session
     esp32_latest = st.session_state.get('esp32_latest', {})
-    current_current = float(esp32_latest.get('current', 50))
-    current_temp = float(esp32_latest.get('temperature', 35))
-    current_power = float(esp32_latest.get('power_watts', 11500))
-    current_humidity = float(esp32_latest.get('humidity', 55))
+    
+    # If no session data, try to fetch from ESP32 server
+    if not esp32_latest:
+        try:
+            esp32_url = "http://localhost:8001"
+            resp = requests.get(f"{esp32_url}/api/latest", timeout=3)
+            if resp.status_code == 200:
+                esp32_latest = resp.json()
+                st.session_state.esp32_latest = esp32_latest
+            else:
+                st.warning(f"⚠️ ESP32 server not responding. Using default values. Check Tab 7 for status.")
+        except Exception as e:
+            st.warning(f"⚠️ Could not fetch ESP32 data: {e}")
+    
+    current_a = float(esp32_latest.get('current', 50))
+    temp_c = float(esp32_latest.get('temperature', 35))
+    power_w = float(esp32_latest.get('power_watts', 11500))
+    humidity_pct = float(esp32_latest.get('humidity', 55))
 
-    # Analysis constants
-    OPTIMAL_CURRENT_THRESHOLD = 80  # Amperes
-    CRITICAL_CURRENT = 120
-    OPTIMAL_TEMP = 40  # Celsius
-    CRITICAL_TEMP = 55
-    GRID_CARBON_INTENSITY = 0.42  # kg CO2/kWh (avg)
-    PEAK_HOURS_CARBON = 0.58  # kg CO2/kWh (peak hours 2-4 PM, 6-8 PM)
-    OFF_PEAK_CARBON = 0.28  # kg CO2/kWh (off-peak 11 PM - 6 AM)
-    ELECTRICITY_COST = 0.12  # $/kWh
+    # Update grid carbon intensity (default: 150 gCO2/kWh)
+    recommender.carbon_intensity = 150
 
     # ─── SECTION 1: CURRENT STATE ANALYSIS ──────────────────────────────
     st.markdown('<div class="slabel">📊 Current System State Analysis</div>', unsafe_allow_html=True)
+    
+    # Display data source status
+    data_source = "🔴 ESP32 Real-Time Data" if esp32_latest.get('timestamp') else "🟠 Default Values (No ESP32 Connection)"
+    st.info(f"**Data Source:** {data_source}")
 
     col_state1, col_state2, col_state3, col_state4 = st.columns(4)
 
     with col_state1:
         st.metric(
             label="Current Draw",
-            value=f"{current_current:.1f}A",
-            delta=None,
-            delta_color="normal" if current_current < OPTIMAL_CURRENT_THRESHOLD else "inverse",
+            value=f"{current_a:.1f}A",
+            delta="⚠️ High" if current_a > 80 else "✓ Optimal",
+            delta_color="inverse" if current_a > 80 else "normal",
         )
-        if current_current > CRITICAL_CURRENT:
-            st.warning("⚠️ CRITICAL: Reduce load immediately")
-        elif current_current > OPTIMAL_CURRENT_THRESHOLD:
-            st.warning(f"⚡ Optimize: Target <{OPTIMAL_CURRENT_THRESHOLD}A")
 
     with col_state2:
         st.metric(
             label="Temperature",
-            value=f"{current_temp:.1f}°C",
-            delta=None,
-            delta_color="normal" if current_temp < OPTIMAL_TEMP else "inverse",
+            value=f"{temp_c:.1f}°C",
+            delta="⚠️ Elevated" if temp_c > 40 else "✓ Normal",
+            delta_color="inverse" if temp_c > 40 else "normal",
         )
-        if current_temp > CRITICAL_TEMP:
-            st.warning("⚠️ HOTSPOT: Cooling required")
-        elif current_temp > OPTIMAL_TEMP:
-            st.warning(f"🌡️ Optimize: Target <{OPTIMAL_TEMP}°C")
 
     with col_state3:
-        carbon_per_hour = (current_power / 1000) * GRID_CARBON_INTENSITY
+        carbon_per_hour = (power_w / 1000) * recommender.carbon_intensity / 1000
         st.metric(
             label="Carbon/Hour",
-            value=f"{carbon_per_hour:.2f}kg CO₂",
-            delta=None,
+            value=f"{carbon_per_hour:.3f}kg CO₂",
         )
 
     with col_state4:
-        cost_per_hour = (current_power / 1000) * ELECTRICITY_COST
+        humidity_display = float(esp32_latest.get('humidity', 55))
         st.metric(
-            label="Cost/Hour",
-            value=f"${cost_per_hour:.2f}",
-            delta=None,
+            label="Humidity",
+            value=f"{humidity_display:.0f}%",
+            delta="⚠️ High" if humidity_display > 70 else "✓ Optimal",
+            delta_color="inverse" if humidity_display > 70 else "normal",
         )
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # ─── SECTION 2: OPTIMIZATION OPPORTUNITIES ──────────────────────────
-    st.markdown('<div class="slabel">💡 Optimization Opportunities</div>', unsafe_allow_html=True)
+    # ─── SECTION 2: GENERATE DYNAMIC RECOMMENDATIONS ─────────────────────
+    st.markdown('<div class="slabel">💡 AI-Generated Optimization Opportunities</div>', unsafe_allow_html=True)
 
-    opportunities = []
+    # Generate recommendations based on current ESP32 data
+    recommendations = recommender.get_recommendations(
+        current_a=current_a,
+        temp_c=temp_c,
+        humidity_pct=humidity_pct,
+        power_w=power_w
+    )
 
-    # Opportunity 1: Load Balancing
-    if current_current > OPTIMAL_CURRENT_THRESHOLD:
-        reduction_pct = ((current_current - OPTIMAL_CURRENT_THRESHOLD) / current_current) * 100
-        savings_kw = (reduction_pct / 100) * (current_power / 1000)
-        savings_daily = savings_kw * 24 * ELECTRICITY_COST
-        savings_carbon_daily = savings_kw * 24 * GRID_CARBON_INTENSITY
+    if not recommendations:
+        st.info("✓ System operating within optimal parameters. No immediate recommendations.")
+    else:
+        for idx, rec in enumerate(recommendations, 1):
+            # Color code confidence levels
+            confidence_colors = {
+                "HIGH": "#00ff88",
+                "MEDIUM": "#ffd600",
+                "LOW": "#ff6b6b"
+            }
+            confidence_color = confidence_colors.get(rec.confidence, "#ffd600")
+            confidence_emoji = {
+                "HIGH": "✅",
+                "MEDIUM": "⚠️",
+                "LOW": "ℹ️"
+            }.get(rec.confidence, "ℹ️")
 
-        opportunities.append({
-            "rank": 1,
-            "title": "⚡ Load Balancing & Peak Shaving",
-            "description": f"Reduce current from {current_current:.1f}A to {OPTIMAL_CURRENT_THRESHOLD}A through load distribution and scheduling",
-            "impact_pct": reduction_pct,
-            "savings_kwh_daily": savings_kw * 24,
-            "savings_cost_daily": savings_daily,
-            "savings_carbon_daily": savings_carbon_daily,
-            "implementation": "Stagger batch starts, distribute load across multiple production lines, enable demand-response",
-            "timeline": "Immediate (1-2 weeks)",
-        })
+            with st.expander(
+                f"{idx}. {rec.title} — {confidence_emoji} {rec.confidence} Confidence",
+                expanded=(idx == 1)
+            ):
+                col_rec1, col_rec2 = st.columns([2, 1])
 
-    # Opportunity 2: Thermal Management
-    if current_temp > OPTIMAL_TEMP:
-        cooling_overhead = (current_temp - OPTIMAL_TEMP) * 0.5  # 0.5% per °C
-        savings_kw = (cooling_overhead / 100) * (current_power / 1000)
-        savings_daily = savings_kw * 24 * ELECTRICITY_COST
-        savings_carbon_daily = savings_kw * 24 * GRID_CARBON_INTENSITY
+                with col_rec1:
+                    st.markdown(f"**{rec.description}**")
+                    st.markdown(f"📋 **Implementation:** {rec.icon}")
+                    st.markdown(f"⏱️ **Timeline:** {rec.timeline}")
+                    
+                    # Show triggering factors
+                    st.markdown("**Identified Factors:**")
+                    for factor in rec.factors:
+                        st.markdown(f"  • {factor}")
 
-        opportunities.append({
-            "rank": 2,
-            "title": "🌡️ Thermal Management Optimization",
-            "description": f"Reduce temperature from {current_temp:.1f}°C to {OPTIMAL_TEMP}°C through better cooling and ventilation",
-            "impact_pct": cooling_overhead,
-            "savings_kwh_daily": savings_kw * 24,
-            "savings_cost_daily": savings_daily,
-            "savings_carbon_daily": savings_carbon_daily,
-            "implementation": "Upgrade cooling systems, optimize HVAC scheduling, implement predictive cooling",
-            "timeline": "Medium-term (1-2 months)",
-        })
-
-    # Opportunity 3: Carbon-Aware Scheduling
-    carbon_shift_daily = (current_power / 1000) * 24 * (PEAK_HOURS_CARBON - OFF_PEAK_CARBON) * 0.3  # Assume 30% can shift
-    cost_shift_daily = (current_power / 1000) * 24 * (ELECTRICITY_COST) * 0.15
-
-    opportunities.append({
-        "rank": 3,
-        "title": "🕐 Carbon-Aware Production Scheduling",
-        "description": f"Shift 30% of batch production to off-peak, low-carbon hours (11 PM - 6 AM)",
-        "impact_pct": 30,
-        "savings_kwh_daily": 0,  # No energy savings, only carbon
-        "savings_cost_daily": cost_shift_daily,
-        "savings_carbon_daily": carbon_shift_daily,
-        "implementation": "Enable carbon-aware scheduler, adjust batch queue according to grid carbon intensity",
-        "timeline": "Short-term (2-4 weeks)",
-    })
-
-    # Opportunity 4: Predictive Maintenance
-    if current_current > 60 or current_temp > 40:
-        maint_savings_pct = 8  # 8% efficiency gain from predictive maintenance
-        savings_kw = (maint_savings_pct / 100) * (current_power / 1000)
-        savings_daily = savings_kw * 24 * ELECTRICITY_COST
-        savings_carbon_daily = savings_kw * 24 * GRID_CARBON_INTENSITY
-
-        opportunities.append({
-            "rank": 4,
-            "title": "🔧 Predictive Maintenance & Equipment Efficiency",
-            "description": "Improve equipment efficiency by 8% through predictive maintenance schedules",
-            "impact_pct": maint_savings_pct,
-            "savings_kwh_daily": savings_kw * 24,
-            "savings_cost_daily": savings_daily,
-            "savings_carbon_daily": savings_carbon_daily,
-            "implementation": "Deploy sensor-based predictive maintenance, optimize lubrication schedules, replace worn components",
-            "timeline": "Ongoing (monthly reviews)",
-        })
-
-    # Display opportunities
-    if opportunities:
-        for opp in sorted(opportunities, key=lambda x: x['rank']):
-            with st.expander(f"{opp['rank']}. {opp['title']}", expanded=(opp['rank'] == 1)):
-                col_opp1, col_opp2 = st.columns([2, 1])
-
-                with col_opp1:
-                    st.markdown(f"**Description:** {opp['description']}")
-                    st.markdown(f"**Implementation:** {opp['implementation']}")
-                    st.markdown(f"**Timeline:** {opp['timeline']}")
-
-                with col_opp2:
-                    st.markdown("**Daily Impact:**")
-                    if opp['savings_kwh_daily'] > 0:
-                        st.success(f"💾 {opp['savings_kwh_daily']:.1f} kWh")
-                    if opp['savings_cost_daily'] > 0:
-                        st.success(f"💰 ${opp['savings_cost_daily']:.2f}")
-                    if opp['savings_carbon_daily'] > 0:
-                        st.success(f"🌍 {opp['savings_carbon_daily']:.2f} kg CO₂")
-                    st.metric("Impact", f"{opp['impact_pct']:.1f}%", label_visibility="collapsed")
+                with col_rec2:
+                    st.markdown("**Daily Impact:**", help="Estimated savings per day if recommendation is implemented")
+                    
+                    col_savings1, col_savings2, col_savings3 = st.columns(3)
+                    
+                    with col_savings1:
+                        if rec.daily_savings["kwh"] > 0.01:
+                            st.metric(
+                                "Energy",
+                                f"{rec.daily_savings['kwh']:.1f}",
+                                "kWh",
+                                label_visibility="collapsed"
+                            )
+                    
+                    with col_savings2:
+                        # Cost metric removed - industry-specific costs unknown
+                        pass
+                    
+                    with col_savings3:
+                        if rec.daily_savings["carbon"] > 0.001:
+                            st.metric(
+                                "Carbon",
+                                f"{rec.daily_savings['carbon']:.2f}",
+                                "kg",
+                                label_visibility="collapsed"
+                            )
+                    
+                    # Confidence indicator
+                    st.markdown(f"<div style='background:rgba(255,255,255,0.04);border-left:3px solid {confidence_color};padding:8px 12px;border-radius:4px;margin-top:12px;font-size:0.85rem;'><strong>Confidence:</strong> {rec.confidence}</div>", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # ─── SECTION 3: TOTAL IMPACT & ROI ──────────────────────────────────
-    st.markdown('<div class="slabel">📈 Cumulative Impact & ROI</div>', unsafe_allow_html=True)
+    # ─── SECTION 3: CUMULATIVE IMPACT & ROI ──────────────────────────────
+    if recommendations:
+        st.markdown('<div class="slabel">📈 Cumulative Impact & ROI</div>', unsafe_allow_html=True)
 
-    total_daily_kwh = sum(o['savings_kwh_daily'] for o in opportunities)
-    total_daily_cost = sum(o['savings_cost_daily'] for o in opportunities)
-    total_daily_carbon = sum(o['savings_carbon_daily'] for o in opportunities)
+        cumulative = recommender.get_cumulative_impact(recommendations)
+        
+        col_roi1, col_roi2, col_roi3 = st.columns(3)
 
-    total_annual_kwh = total_daily_kwh * 365
-    total_annual_cost = total_daily_cost * 365
-    total_annual_carbon = total_daily_carbon * 365
+        with col_roi1:
+            st.metric(
+                label="Annual Energy Saved",
+                value=f"{cumulative['annual_kwh']:.0f} kWh",
+                delta=f"Daily: {cumulative['annual_kwh']/365:.1f} kWh",
+            )
 
-    col_roi1, col_roi2, col_roi3, col_roi4 = st.columns(4)
+        with col_roi2:
+            st.metric(
+                label="Annual Carbon Reduced",
+                value=f"{cumulative['annual_carbon']:.0f} kg CO₂",
+                delta=f"Daily: {cumulative['annual_carbon']/365:.2f} kg",
+            )
 
-    with col_roi1:
-        st.metric(
-            label="Annual Energy Saved",
-            value=f"{total_annual_kwh:.0f} kWh",
-            delta=f"Daily: {total_daily_kwh:.1f} kWh",
-        )
+        with col_roi3:
+            st.metric(
+                label="Recommendations Count",
+                value=f"{cumulative['num_recommendations']}",
+                delta="Active optimizations",
+            )
 
-    with col_roi2:
-        st.metric(
-            label="Annual Cost Savings",
-            value=f"${total_annual_cost:.0f}",
-            delta=f"Daily: ${total_daily_cost:.2f}",
-        )
+        st.markdown("<br>", unsafe_allow_html=True)
 
-    with col_roi3:
-        st.metric(
-            label="Annual Carbon Reduced",
-            value=f"{total_annual_carbon:.0f} kg CO₂",
-            delta=f"Daily: {total_daily_carbon:.2f} kg",
-        )
+        # ─── SECTION 4: PROJECTED PERFORMANCE ────────────────────────────
+        st.markdown('<div class="slabel">🎯 Monthly Carbon Impact Projection</div>', unsafe_allow_html=True)
 
-    with col_roi4:
-        # Assume $50k implementation cost for all optimizations
-        impl_cost = 50000
-        payback_months = (impl_cost / total_annual_cost * 12) if total_annual_cost > 0 else 999
-        st.metric(
-            label="Payback Period",
-            value=f"{payback_months:.1f} months",
-            delta="Est. implementation: $50k" if payback_months < 24 else "Long-term investment",
-            delta_color="normal" if payback_months < 24 else "off",
-        )
+        months_list = []
+        monthly_savings_carbon = cumulative['annual_carbon'] / 12
+        monthly_current_carbon = power_w / 1000 * 730 * recommender.carbon_intensity / 1000
+        
+        for month in range(1, 13):
+            months_list.append({
+                "Month": f"M{month}",
+                "Current Carbon": monthly_current_carbon,
+                "Optimized Carbon": monthly_current_carbon - monthly_savings_carbon,
+            })
 
-    st.markdown("<br>", unsafe_allow_html=True)
+        df_monthly = pd.DataFrame(months_list)
 
-    # ─── SECTION 4: BEFORE/AFTER COMPARISON ────────────────────────────
-    st.markdown('<div class="slabel">🎯 Projected monthly performance</div>', unsafe_allow_html=True)
-
-    months_data = []
-    for month in range(1, 13):
-        months_data.append({
-            "Month": f"Month {month}",
-            "Current Cost": current_power / 1000 * 730 * ELECTRICITY_COST,  # 730 hours/month
-            "Optimized Cost": (current_power / 1000 * 730 * ELECTRICITY_COST) - total_daily_cost * 30,
-            "Carbon (kg)": (current_power / 1000 * 730 * GRID_CARBON_INTENSITY),
-            "Optimized Carbon (kg)": (current_power / 1000 * 730 * GRID_CARBON_INTENSITY) - total_daily_carbon * 30,
-        })
-
-    df_monthly = pd.DataFrame(months_data)
-
-    col_chart1, col_chart2 = st.columns(2)
-
-    with col_chart1:
-        fig_cost = go.Figure()
-        fig_cost.add_trace(go.Scatter(
-            x=df_monthly["Month"],
-            y=df_monthly["Current Cost"],
-            mode="lines+markers",
-            name="Current Cost",
-            line=dict(color="#ff6b6b", width=3),
-        ))
-        fig_cost.add_trace(go.Scatter(
-            x=df_monthly["Month"],
-            y=df_monthly["Optimized Cost"],
-            mode="lines+markers",
-            name="After Optimization",
-            line=dict(color="#51cf66", width=3),
-            fill="tonexty",
-            fillcolor="rgba(81,207,102,0.1)",
-        ))
-        fig_cost.update_layout(
-            title="Monthly Cost Projection",
-            xaxis_title="Month",
-            yaxis_title="Cost ($)",
-            template="plotly_dark",
-            hovermode="x unified",
-            height=320,
-        )
-        st.plotly_chart(fig_cost, use_container_width=True)
-
-    with col_chart2:
         fig_carbon = go.Figure()
         fig_carbon.add_trace(go.Scatter(
             x=df_monthly["Month"],
-            y=df_monthly["Carbon (kg)"],
+            y=df_monthly["Current Carbon"],
             mode="lines+markers",
-            name="Current Carbon",
+            name="Current",
             line=dict(color="#ffa940", width=3),
         ))
         fig_carbon.add_trace(go.Scatter(
             x=df_monthly["Month"],
-            y=df_monthly["Optimized Carbon (kg)"],
+            y=df_monthly["Optimized Carbon"],
             mode="lines+markers",
-            name="After Optimization",
+            name="Optimized",
             line=dict(color="#177ddc", width=3),
             fill="tonexty",
-            fillcolor="rgba(23,125,220,0.1)",
         ))
         fig_carbon.update_layout(
-            title="Monthly Carbon Emission Projection",
+            title="Monthly Carbon Projection (kg CO₂)",
             xaxis_title="Month",
-            yaxis_title="Carbon (kg CO₂)",
+            yaxis_title="Carbon Emissions (kg CO₂)",
             template="plotly_dark",
             hovermode="x unified",
-            height=320,
+            height=380,
+            margin=dict(l=20, r=20, t=50, b=20),
         )
-        st.plotly_chart(fig_carbon, use_container_width=True)
+        st.plotly_chart(fig_carbon, use_container_width=True, config={"displayModeBar": False})
 
-    st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
 
-    # ─── SECTION 5: KEY METRICS SUMMARY ────────────────────────────────
-    st.markdown('<div class="slabel">📋 Executive Summary</div>', unsafe_allow_html=True)
+        # ─── SECTION 5: EXECUTIVE SUMMARY ────────────────────────────────
+        st.markdown('<div class="slabel">📋 Executive Summary</div>', unsafe_allow_html=True)
 
-    summary_html = f"""
-    <div style="background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.22);border-radius:14px;padding:20px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-bottom:20px;">
-            <div style="text-align:center;">
-                <div style="font-size:1.2rem;font-weight:700;color:#00ff88;">💚 {total_annual_carbon:.0f}</div>
-                <div style="font-size:0.8rem;color:rgba(255,255,255,0.4);margin-top:4px;">kg CO₂ Annual Reduction</div>
+        summary_html = f"""
+        <div style="background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.22);border-radius:14px;padding:20px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
+                <div style="text-align:center;">
+                    <div style="font-size:1.2rem;font-weight:700;color:#00ff88;">💚 {cumulative['annual_carbon']:.0f}</div>
+                    <div style="font-size:0.8rem;color:rgba(255,255,255,0.4);margin-top:4px;">kg CO₂ Annual Reduction</div>
+                </div>
+                <div style="text-align:center;">
+                    <div style="font-size:1.2rem;font-weight:700;color:#00d4ff;">⚡ {cumulative['annual_kwh']:.0f}</div>
+                    <div style="font-size:0.8rem;color:rgba(255,255,255,0.4);margin-top:4px;">kWh Annual Savings</div>
+                </div>
             </div>
-            <div style="text-align:center;">
-                <div style="font-size:1.2rem;font-weight:700;color:#00d4ff;">💵 ${total_annual_cost:.0f}</div>
-                <div style="font-size:0.8rem;color:rgba(255,255,255,0.4);margin-top:4px;">Annual Cost Savings</div>
-            </div>
-            <div style="text-align:center;">
-                <div style="font-size:1.2rem;font-weight:700;color:#ffa940;">⏱️ {payback_months:.1f}</div>
-                <div style="font-size:0.8rem;color:rgba(255,255,255,0.4);margin-top:4px;">Months to Break Even</div>
-            </div>
-        </div>
-        <div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:16px;margin-bottom:16px;">
-            <div style="font-size:0.85rem;color:rgba(255,255,255,0.7);line-height:1.6;">
-                ✓ <strong>Reduce current draw by {max([o['impact_pct'] for o in opportunities if o['title'].startswith('⚡')] or [0]):.0f}%</strong> through intelligent load balancing<br>
-                ✓ <strong>Lower operating costs by ${total_annual_cost:.0f}/year</strong> through energy efficiency<br>
-                ✓ <strong>Eliminate {total_annual_carbon:.0f} kg CO₂ annually</strong> via carbon-aware scheduling<br>
-                ✓ <strong>ROI achieved in {payback_months:.1f} months</strong> with estimated $50k implementation cost
+            <div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:16px;margin-bottom:16px;">
+                <div style="font-size:0.85rem;color:rgba(255,255,255,0.7);line-height:1.6;">
+                    ✓ <strong>{cumulative['num_recommendations']} actionable recommendations</strong> generated from real-time sensor data<br>
+                    ✓ <strong>Reduce energy consumption by {cumulative['annual_kwh']:.0f} kWh/year</strong> through AI optimization<br>
+                    ✓ <strong>Eliminate {cumulative['annual_carbon']:.0f} kg CO₂ annually</strong> with carbon-aware strategies<br>
+                    ✓ <strong>Implement recommendations</strong> for maximum environmental impact
+                </div>
             </div>
         </div>
-    </div>
-    """
-
-    st.markdown(summary_html, unsafe_allow_html=True)
+        """
+        st.markdown(summary_html, unsafe_allow_html=True)
+    else:
+        st.success("✓ System is operating optimally across all parameters. Continue monitoring for changes.")
 
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # ─── SECTION 6: LIVE BATCH FEED (from Tab 6) ────────────────────────
+    # ─── SECTION 6: ALL OPTIMIZED BATCHES ──────────────────────────────
     st.markdown(
-        '<div class="slabel">&#128225; Live Batch Feed &#8212; Last 20 Dispatched with ML Flags</div>',
+        '<div class="slabel">&#128225; All Optimized Batches</div>',
         unsafe_allow_html=True,
     )
 
@@ -2945,6 +2885,7 @@ with tab8:
 
     try:
         _fconn = sqlite3.connect(DB_PATH)
+        # Get all recent batches with optimization data
         df_feed = pd.read_sql_query(
             """SELECT b.batch_id,
                       ROUND(b.yield,4)               AS yield,

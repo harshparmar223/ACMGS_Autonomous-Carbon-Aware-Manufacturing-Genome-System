@@ -380,8 +380,8 @@ async def websocket_endpoint(websocket: WebSocket):
 if __name__ == "__main__":
     import uvicorn
     
-    logger.info("Starting ACMGS Real-Time ESP32 Server on http://0.0.0.0:8000")
-    logger.info("API docs: http://localhost:8000/docs")
-    logger.info("WebSocket: ws://localhost:8000/ws")
+    logger.info("Starting ACMGS Real-Time ESP32 Server on http://0.0.0.0:8001")
+    logger.info("API docs: http://localhost:8001/docs")
+    logger.info("WebSocket: ws://localhost:8001/ws")
     
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)
