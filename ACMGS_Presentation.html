@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ACMGS - Carbon-Aware Manufacturing</title>
+<style>
+  @page { size: 13.333in 7.5in; margin: 0; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #102A43; background: #EEF6F3; }
+  .slide { width: 13.333in; height: 7.5in; page-break-after: always; overflow: hidden; padding: .62in .78in; position: relative; background: #fff; }
+  .slide:last-child { page-break-after: auto; }
+  .topline { height: 7px; width: 1.15in; background: #00A878; margin-bottom: .22in; }
+  .eyebrow { color: #00A878; text-transform: uppercase; font-size: 12pt; font-weight: 700; letter-spacing: 1.8px; margin-bottom: .12in; }
+  h1 { font-size: 39pt; margin: 0 0 .16in; line-height: 1.04; letter-spacing: -.7px; }
+  h2 { font-size: 28pt; margin: 0 0 .24in; line-height: 1.1; }
+  h3 { color: #087F5B; font-size: 15pt; margin: 0 0 .08in; }
+  p, li { font-size: 15pt; line-height: 1.32; }
+  p { margin: 0 0 .16in; }
+  ul { margin: .05in 0 0; padding-left: .26in; }
+  li { margin: .09in 0; }
+  .muted { color: #486581; }
+  .footer { position: absolute; bottom: .34in; left: .78in; right: .78in; display: flex; justify-content: space-between; color: #627D98; font-size: 10pt; }
+  .cover { background: linear-gradient(135deg, #063C35 0%, #0B6E4F 58%, #00A878 100%); color: white; padding-top: 1.18in; }
+  .cover .eyebrow { color: #B9F6D3; }
+  .cover h1 { font-size: 46pt; max-width: 8.8in; }
+  .cover p { font-size: 21pt; max-width: 7.2in; color: #E2F7EC; }
+  .cover .mark { position: absolute; right: .88in; bottom: .78in; width: 2.15in; height: 2.15in; border: 8px solid #8EE7BD; border-radius: 50%; }
+  .cover .mark:after { content: ''; position: absolute; width: .72in; height: 1.28in; left: .76in; top: .25in; border-radius: 75% 0 75% 0; background: #8EE7BD; transform: rotate(45deg); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: .25in; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: .18in; }
+  .card { border: 1px solid #D9E2EC; border-radius: 10px; padding: .18in .2in; background: #fff; min-height: 1.15in; }
+  .card p { font-size: 12.5pt; margin: 0; line-height: 1.24; }
+  .number { color: #00A878; font-size: 28pt; font-weight: 700; line-height: 1; margin-bottom: .07in; }
+  .impact { background: #EAF9F1; border-left: 7px solid #00A878; padding: .17in .23in; margin-top: .18in; }
+  .impact p { margin: 0; font-size: 15.5pt; }
+  .flow { display: flex; align-items: center; gap: .08in; margin-top: .4in; }
+  .flow div { background: #EAF9F1; border-radius: 8px; padding: .18in .13in; text-align: center; font-size: 12pt; font-weight: 700; width: 1.45in; min-height: .78in; display:flex; align-items:center; justify-content:center; }
+  .arrow { color: #00A878; font-size: 21pt; width: .23in !important; background: transparent !important; padding: 0 !important; }
+  .pill { display: inline-block; background: #EAF9F1; color: #087F5B; border-radius: 20px; padding: 5px 12px; font-size: 11pt; font-weight: 700; margin: 4px 4px 0 0; }
+  .table { width:100%; border-collapse: collapse; margin-top: .12in; }
+  .table th { background:#063C35; color:#fff; font-size: 12pt; padding: 10px; text-align:left; }
+  .table td { font-size: 12pt; padding: 10px; border-bottom: 1px solid #D9E2EC; }
+  .table tr:nth-child(even) td { background:#F7FBFA; }
+  .bigquote { font-size: 24pt; line-height: 1.22; color:#063C35; max-width: 10.8in; margin-top: .45in; }
+</style>
+</head>
+<body>
+<section class="slide cover">
+  <div class="eyebrow">Startup Pitch Presentation</div>
+  <h1>ACMGS</h1>
+  <p>Autonomous Carbon-Aware Manufacturing Genome System</p>
+  <p style="font-size:16pt;margin-top:.6in">Making every manufacturing decision smarter, more efficient, and lower-carbon.</p>
+  <div class="mark"></div>
+  <div class="footer" style="color:#C6F5D8"><span>AI + IoT + Optimization</span><span>2026</span></div>
+</section>
+
+<section class="slide"><div class="topline"></div><div class="eyebrow">01 / Problem Statement</div><h2>Manufacturers can see energy use, but cannot act on it intelligently.</h2>
+<div class="grid2"><div><ul><li>Energy costs and carbon-compliance pressure continue to rise.</li><li>Production schedules rarely adapt to changing grid-carbon intensity.</li><li>Machine degradation is often discovered only after quality, efficiency, or uptime suffers.</li><li>Critical data remains fragmented across sensors, MES/ERP systems, and manual records.</li></ul></div><div class="impact"><p><b>The gap:</b> Conventional tools monitor consumption. They do not recommend the best operational decision in real time.</p></div></div><div class="footer"><span>ACMGS</span><span>01</span></div></section>
+
+<section class="slide"><div class="topline"></div><div class="eyebrow">02 / Proposed Solution</div><h2>An autonomous intelligence layer for carbon-aware production.</h2><p class="muted">ACMGS combines live machine data, AI predictions, and optimization to improve yield, quality, energy use, cost, and emissions.</p>
+<div class="grid3"><div class="card"><div class="number">01</div><h3>Sense</h3><p>Capture power, current, temperature, and humidity through IoT devices.</p></div><div class="card"><div class="number">02</div><h3>Understand</h3><p>Create machine Energy DNA and unified Batch Genome profiles.</p></div><div class="card"><div class="number">03</div><h3>Predict</h3><p>Forecast energy demand, yield, quality, and equipment risk.</p></div><div class="card"><div class="number">04</div><h3>Optimize</h3><p>Find practical trade-offs between output, energy, and carbon.</p></div><div class="card"><div class="number">05</div><h3>Act</h3><p>Recommend schedules, maintenance actions, and efficiency improvements.</p></div><div class="card"><div class="number">06</div><h3>Learn</h3><p>Improve decisions as more production and sensor data is collected.</p></div></div><div class="footer"><span>ACMGS</span><span>02</span></div></section>
+
+<section class="slide"><div class="topline"></div><div class="eyebrow">03 / Innovation & Uniqueness</div><h2>One integrated system, not another dashboard.</h2><div class="grid2"><div><h3>Core innovations</h3><ul><li><b>Energy DNA:</b> LSTM-based machine energy signatures detect anomalous and degrading behaviour.</li><li><b>Batch Genome:</b> A unified representation of material, process, energy, and carbon variables.</li><li><b>Multi-objective optimization:</b> Balances yield, quality, energy consumption, and CO2 emissions.</li></ul></div><div><h3>Operational advantage</h3><ul><li><b>Carbon-aware scheduling:</b> Aligns flexible production with lower-carbon grid periods.</li><li><b>Dynamic recommendations:</b> Uses trends, thermal conditions, maintenance indicators, and confidence scores.</li><li><b>Open integration:</b> Connects real-time devices, existing industrial systems, and reporting workflows.</li></ul></div></div><div class="impact"><p><b>Unique value:</b> ACMGS turns manufacturing data into carbon-aware operational decisions, not just reports.</p></div><div class="footer"><span>ACMGS</span><span>03</span></div></section>
+
+<section class="slide"><div class="topline"></div><div class="eyebrow">04 / Target Users</div><h2>Built for the people accountable for efficiency, reliability, and ESG outcomes.</h2><div class="grid3"><div class="card"><h3>Plant Managers</h3><p>Need lower energy cost, better throughput, and fewer production disruptions.</p></div><div class="card"><h3>Operations Teams</h3><p>Need clear, actionable guidance for process settings and scheduling.</p></div><div class="card"><h3>Sustainability Teams</h3><p>Need reliable carbon-intensity data and auditable improvement evidence.</p></div><div class="card"><h3>Maintenance Teams</h3><p>Need early warnings before machine faults cause downtime or defects.</p></div><div class="card"><h3>Mid-Market Manufacturers</h3><p>Need a practical, affordable route to Industry 4.0 adoption.</p></div><div class="card"><h3>Energy-Intensive Sectors</h3><p>Automotive, electronics, chemicals, metals, pharma, cement, and more.</p></div></div><div class="footer"><span>ACMGS</span><span>04</span></div></section>
+
+<section class="slide"><div class="topline"></div><div class="eyebrow">05 / Technology Approach</div><h2>From sensor signal to optimized production action.</h2><div class="flow"><div>IoT sensors<br><span class="muted">Power, temperature, humidity</span></div><div class="arrow">→</div><div>Data platform<br><span class="muted">API + database</span></div><div class="arrow">→</div><div>AI models<br><span class="muted">Energy DNA + prediction</span></div><div class="arrow">→</div><div>NSGA-II optimizer<br><span class="muted">Pareto solutions</span></div><div class="arrow">→</div><div>Dashboard & API<br><span class="muted">Recommended action</span></div></div>
+<div style="margin-top:.48in"><span class="pill">ESP32 / Arduino</span><span class="pill">PyTorch</span><span class="pill">XGBoost</span><span class="pill">scikit-learn</span><span class="pill">FastAPI</span><span class="pill">SQL</span><span class="pill">Streamlit</span><span class="pill">REST / MQTT / Modbus</span></div><div class="impact"><p><b>Design principle:</b> Modular components allow a single production line pilot to grow into an enterprise platform.</p></div><div class="footer"><span>ACMGS</span><span>05</span></div></section>
+
+<section class="slide"><div class="topline"></div><div class="eyebrow">06 / Expected Impact</div><h2>Operational savings with measurable environmental value.</h2><div class="grid3"><div class="card"><div class="number">5-15%</div><h3>Energy Reduction</h3><p>Through load balancing, thermal optimization, and smarter maintenance.</p></div><div class="card"><div class="number">5-10%</div><h3>Performance Gain</h3><p>Target improvement in batch yield and quality performance.</p></div><div class="card"><div class="number">24/7</div><h3>Decision Support</h3><p>Live recommendations backed by estimated impact and confidence.</p></div></div><div class="grid2" style="margin-top:.22in"><div><h3>Business outcomes</h3><ul><li>Lower energy spend and peak-demand exposure</li><li>Less scrap and improved production consistency</li><li>Reduced unplanned downtime through early alerts</li></ul></div><div><h3>Sustainability outcomes</h3><ul><li>Lower CO2 intensity per unit produced</li><li>Traceable evidence for ESG and carbon reporting</li><li>Cleaner scheduling choices when production is flexible</li></ul></div></div><div class="footer"><span>ACMGS</span><span>06</span></div></section>
+
+<section class="slide"><div class="topline"></div><div class="eyebrow">07 / Feasibility</div><h2>A working prototype built on proven industrial technologies.</h2><table class="table"><tr><th>Component</th><th>Implementation status</th><th>Business role</th></tr><tr><td>IoT sensor integration</td><td>Implemented</td><td>Captures real-time operational data</td></tr><tr><td>Energy DNA & Batch Genome</td><td>Implemented</td><td>Builds interpretable machine and batch profiles</td></tr><tr><td>Prediction & optimization engine</td><td>Implemented</td><td>Forecasts outcomes and produces trade-off options</td></tr><tr><td>Carbon scheduler, API & dashboard</td><td>Implemented</td><td>Delivers recommendations to users and systems</td></tr></table><div class="impact"><p><b>Pilot path:</b> Instrument one high-energy line, ingest historical data, validate recommendations, then expand across the facility.</p></div><div class="footer"><span>ACMGS</span><span>07</span></div></section>
+
+<section class="slide"><div class="topline"></div><div class="eyebrow">08 / Scalability</div><h2>Designed to scale from one machine to multiple factories.</h2><div class="grid3"><div class="card"><h3>Machine Level</h3><p>Add sensors and create an Energy DNA profile for individual assets.</p></div><div class="card"><h3>Production-Line Level</h3><p>Optimize batches, processes, and scheduling across connected equipment.</p></div><div class="card"><h3>Factory Level</h3><p>Aggregate operational, cost, and carbon performance across lines.</p></div><div class="card"><h3>Enterprise Level</h3><p>Benchmark sites and support multi-factory carbon-aware planning.</p></div><div class="card"><h3>Deployment Flexibility</h3><p>Support on-premise, cloud, or hybrid deployments for industrial needs.</p></div><div class="card"><h3>Integration Ready</h3><p>Connect through REST APIs, MQTT, Modbus, CSV, and databases.</p></div></div><div class="footer"><span>ACMGS</span><span>08</span></div></section>
+
+<section class="slide"><div class="topline"></div><div class="eyebrow">09 / Product & Startup Potential</div><h2>A scalable climate-tech platform for intelligent manufacturing.</h2><div class="grid2"><div><h3>Product model</h3><ul><li>SaaS platform for monitoring, prediction, optimization, and reporting</li><li>Optional IoT sensor kits for rapid deployment</li><li>Integration and professional services for MES/ERP connectivity</li></ul><h3 style="margin-top:.25in">Go-to-market</h3><p>Start with mid-market, energy-intensive factories; prove savings through pilots; scale through industrial integrators and enterprise partnerships.</p></div><div><h3>Why ACMGS can win</h3><ul><li>Combines carbon reduction with daily operational value.</li><li>Moves beyond reporting into AI-driven decision support.</li><li>Delivers a modular adoption path with measurable ROI.</li><li>Creates a growing data advantage as more machines and batches are connected.</li></ul></div></div><p class="bigquote">“Make every manufacturing decision smarter, more efficient, and lower-carbon.”</p><div class="footer"><span>ACMGS</span><span>09</span></div></section>
+</body></html>
