@@ -233,6 +233,11 @@ details > summary {
 """, unsafe_allow_html=True)
 
 
+def clean_html(html_str: str) -> str:
+    """Removes all indentation and internal blank lines so Streamlit markdown never treats HTML as code blocks."""
+    return "".join(line.strip() for line in html_str.splitlines() if line.strip())
+
+
 # ─── Constants ────────────────────────────────────────────────────────────────
 GENOME_LABELS = (
     ["Temp", "Pressure", "Speed", "FeedRate", "Humidity"]
@@ -1661,7 +1666,7 @@ with tab6:
     }[decision.severity]
 
     st.markdown(
-        f"""
+        clean_html(f"""
         <div style="background:{sev_bg};border:1px solid {sev_color};border-radius:12px;padding:18px;margin-bottom:16px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
                 <div>
@@ -1706,7 +1711,7 @@ with tab6:
                 </div>
             </div>
         </div>
-        """,
+        """),
         unsafe_allow_html=True
     )
 
@@ -1718,7 +1723,7 @@ with tab6:
         is_safe = decision.safety_check.passed
         
         st.markdown(
-            f"""
+            clean_html(f"""
             <div style="background:{'rgba(0,255,136,0.06)' if is_safe else 'rgba(255,75,75,0.08)'};
                         border:1px solid {'#00ff88' if is_safe else '#ff4b4b'};border-radius:12px;padding:16px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
@@ -1734,7 +1739,7 @@ with tab6:
                 </div>
                 {f'<div style="color:#ff6b6b;font-size:0.8rem;margin-top:8px;font-weight:600;">⚠️ Violations: {", ".join(decision.safety_check.violations)}</div>' if not is_safe else ''}
             </div>
-            """,
+            """),
             unsafe_allow_html=True
         )
 
@@ -1761,7 +1766,7 @@ with tab6:
     
     with col_op_msg:
         st.markdown(
-            f"""
+            clean_html(f"""
             <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;">
                 <div style="font-size:0.75rem;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">
                     Pending Operator Approval Ticket · ID: {req_id}
@@ -1773,7 +1778,7 @@ with tab6:
                     Recommendation requires operator sign-off before physical dispatch. Deterministic Safety Engine validates command a second time on execution.
                 </div>
             </div>
-            """,
+            """),
             unsafe_allow_html=True
         )
 
@@ -1797,7 +1802,7 @@ with tab6:
     if st.session_state.operator_feedback:
         ok, msg = st.session_state.operator_feedback
         st.markdown(
-            f"""
+            clean_html(f"""
             <div style="background:{'rgba(0,255,136,0.1)' if ok else 'rgba(255,75,75,0.1)'};
                         border:1px solid {'#00ff88' if ok else '#ff4b4b'};border-radius:10px;padding:12px 18px;margin-top:10px;">
                 <div style="font-size:0.85rem;font-weight:700;color:{'#00ff88' if ok else '#ff4b4b'};">
@@ -1807,7 +1812,7 @@ with tab6:
                     {msg}
                 </div>
             </div>
-            """,
+            """),
             unsafe_allow_html=True
         )
 
@@ -1822,7 +1827,7 @@ with tab6:
         # Pre-flight checks
         verif = recovery_mgr.verify_pre_flight(live_state.machine_id, p_temp, p_curr)
         st.markdown(
-            f"""
+            clean_html(f"""
             <div style="background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;">
                 <div style="font-size:0.8rem;font-weight:700;color:#00d4ff;margin-bottom:8px;">
                     3-Point Pre-Flight Verification Checklist
@@ -1833,7 +1838,7 @@ with tab6:
                     ✓ <b>Checkpoint Ingestion Buffer:</b> 128 points verified
                 </div>
             </div>
-            """,
+            """),
             unsafe_allow_html=True
         )
 
@@ -1849,7 +1854,7 @@ with tab6:
         if st.session_state.recovery_feedback:
             r_ok, r_msg = st.session_state.recovery_feedback
             st.markdown(
-                f"""
+                clean_html(f"""
                 <div style="background:{'rgba(0,255,136,0.1)' if r_ok else 'rgba(255,214,0,0.1)'};
                             border:1px solid {'#00ff88' if r_ok else '#ffd600'};border-radius:8px;padding:10px 14px;margin-top:10px;">
                     <div style="font-size:0.8rem;font-weight:700;color:{'#00ff88' if r_ok else '#ffd600'};">
@@ -1859,7 +1864,7 @@ with tab6:
                         {r_msg}
                     </div>
                 </div>
-                """,
+                """),
                 unsafe_allow_html=True
             )
 
@@ -1969,10 +1974,13 @@ with tab7:
     plan_a = twin_res.plan_a_legacy
     plan_b = twin_res.plan_b_acmgs
 
-    # Comparison Matrix Table
-    st.markdown(
-        f"""
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:20px;">
+    # Comparison Matrix Table (Rendered in separate Streamlit columns with clean_html)
+    col_plan_a, col_plan_b = st.columns(2)
+    with col_plan_a:
+        outcome_color = "#ff4b4b" if inject_defect else "#00ff88"
+        outcome_text = "SCRAP (Yield 0.0)" if inject_defect else f"Yield {plan_a['yield']:.4f}"
+        st.markdown(
+            clean_html(f"""
             <div style="background:rgba(255,75,75,0.05);border:1px solid rgba(255,75,75,0.25);border-radius:12px;padding:18px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
                     <div style="font-size:1.1rem;font-weight:700;color:#ff6b6b;">🏭 Plan A: Legacy Factory Baseline</div>
@@ -1996,13 +2004,19 @@ with tab7:
                     </div>
                     <div style="background:rgba(255,255,255,0.03);padding:8px;border-radius:6px;">
                         <div style="font-size:0.65rem;color:rgba(255,255,255,0.4);">Final Batch Outcome</div>
-                        <div style="font-size:0.9rem;font-weight:700;color:{'#ff4b4b' if inject_defect else '#00ff88'};">
-                            {'SCRAP (Yield 0.0)' if inject_defect else f"Yield {plan_a['yield']:.4f}"}
-                        </div>
+                        <div style="font-size:0.9rem;font-weight:700;color:{outcome_color};">{outcome_text}</div>
                     </div>
                 </div>
             </div>
-            
+            """),
+            unsafe_allow_html=True
+        )
+
+    with col_plan_b:
+        cycle_txt = f"{plan_b['cycle_time_mins']:.1f} mins {'(ABORTED)' if inject_defect else ''}"
+        mat_status = "100% Reclaimable (No Burn)" if inject_defect else "Good Part Produced"
+        st.markdown(
+            clean_html(f"""
             <div style="background:rgba(0,255,136,0.05);border:1px solid rgba(0,255,136,0.3);border-radius:12px;padding:18px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
                     <div style="font-size:1.1rem;font-weight:700;color:#00ff88;">🧬 Plan B: ACMGS Autonomous System</div>
@@ -2014,9 +2028,7 @@ with tab7:
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
                     <div style="background:rgba(255,255,255,0.03);padding:8px;border-radius:6px;">
                         <div style="font-size:0.65rem;color:rgba(255,255,255,0.4);">Cycle Run Time</div>
-                        <div style="font-size:1.0rem;font-weight:700;color:#00ff88;font-family:JetBrains Mono,monospace;">
-                            {plan_b['cycle_time_mins']:.1f} mins {'(ABORTED)' if inject_defect else ''}
-                        </div>
+                        <div style="font-size:1.0rem;font-weight:700;color:#00ff88;font-family:JetBrains Mono,monospace;">{cycle_txt}</div>
                     </div>
                     <div style="background:rgba(255,255,255,0.03);padding:8px;border-radius:6px;">
                         <div style="font-size:0.65rem;color:rgba(255,255,255,0.4);">Actual Energy Drawn</div>
@@ -2028,16 +2040,13 @@ with tab7:
                     </div>
                     <div style="background:rgba(255,255,255,0.03);padding:8px;border-radius:6px;">
                         <div style="font-size:0.65rem;color:rgba(255,255,255,0.4);">Material Status</div>
-                        <div style="font-size:0.9rem;font-weight:700;color:#a855f7;">
-                            {'100% Reclaimable (No Burn)' if inject_defect else 'Good Part Produced'}
-                        </div>
+                        <div style="font-size:0.9rem;font-weight:700;color:#a855f7;">{mat_status}</div>
                     </div>
                 </div>
             </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+            """),
+            unsafe_allow_html=True
+        )
 
     # Power Draw Timeline & Integral Visualizer
     timeline = twin_res.power_timeline
@@ -2169,7 +2178,7 @@ with tab7:
         st.markdown("<br>", unsafe_allow_html=True)
 
         st.markdown(
-            f"""
+            clean_html(f"""
             <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:16px;">
                 <div style="font-size:0.75rem;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Closed-Loop Micro Actuation Response (&lt;1 ms)</div>
                 <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -2190,7 +2199,7 @@ with tab7:
                     </div>
                 </div>
             </div>
-            """,
+            """),
             unsafe_allow_html=True
         )
 
@@ -2249,7 +2258,7 @@ with tab8:
     c_stat1, c_stat2, c_stat3 = st.columns([5, 4, 3])
     with c_stat1:
         st.markdown(
-            f"""
+            clean_html(f"""
             <div style="background:rgba(255,255,255,0.03);border:1px solid {'#00ff88' if server_online else 'rgba(255,214,0,0.4)'};
                         border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:12px;">
                 <div style="font-size:1.6rem;">{'🟢' if server_online else '🟡'}</div>
@@ -2262,13 +2271,13 @@ with tab8:
                     </div>
                 </div>
             </div>
-            """,
+            """),
             unsafe_allow_html=True
         )
 
     with c_stat2:
         st.markdown(
-            f"""
+            clean_html(f"""
             <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px 16px;">
                 <div style="display:flex;justify-content:space-between;">
                     <span style="font-size:0.72rem;color:rgba(255,255,255,0.4);">PACKETS INGESTED</span>
@@ -2279,7 +2288,7 @@ with tab8:
                     <span style="font-size:0.72rem;color:#00ff88;font-family:JetBrains Mono,monospace;">0.85 ms</span>
                 </div>
             </div>
-            """,
+            """),
             unsafe_allow_html=True
         )
 
@@ -2409,7 +2418,7 @@ with tab8:
 
     with col_fan_info:
         st.markdown(
-            f"""
+            clean_html(f"""
             <div style="background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;height:200px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                     <div style="font-size:0.95rem;font-weight:700;color:{'#ff4b4b' if act_out.emergency_abort else ('#ffd600' if act_out.fan_pwm_duty > 0 else '#00ff88')};">
@@ -2437,7 +2446,7 @@ with tab8:
                     </div>
                 </div>
             </div>
-            """,
+            """),
             unsafe_allow_html=True
         )
 
