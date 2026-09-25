@@ -48,6 +48,10 @@ class PreResumeVerification:
     verified_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
 
+# Backward-compatible alias
+PreFlightVerification = PreResumeVerification
+
+
 class RecoveryManager:
     """
     Manages safe state preservation, post-maintenance verification, and production resumption.

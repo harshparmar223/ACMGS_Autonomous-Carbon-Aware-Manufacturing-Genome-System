@@ -53,7 +53,7 @@ from src.services.production_continuity import (
     EconomicImpactAnalysis,
 )
 from src.safety.safety_rules import SafetyRuleEngine, SafetyBoundaryConfig, SafetyCheckResult
-from src.services.recovery import RecoveryManager, PreFlightVerification
+from src.services.recovery import RecoveryManager, PreResumeVerification
 from src.services.command_service import CommandService
 import torch
 
