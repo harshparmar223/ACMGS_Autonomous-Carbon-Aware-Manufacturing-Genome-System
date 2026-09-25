@@ -8,6 +8,10 @@ import sys
 import importlib
 from pathlib import Path
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
+
 def test_phase(phase_num, phase_name, module_path, required_functions=None):
     """Test if a phase module exists and has required functions"""
     print(f"\n{'='*60}")
@@ -169,8 +173,35 @@ def main():
     # Phase 9: Dashboard
     results['Phase 9'] = test_phase(
         9, "Visualization Dashboard",
-        "src.dashboard",
-        []  # May not be implemented yet
+        "src.dashboard.app",
+        []
+    )
+
+    # Phase 10: Closed-Loop Control & Intelligence (v2.0 Upgrades)
+    results['Phase 10 (Decision Engine)'] = test_phase(
+        10, "Closed-Loop Decision Engine & Interlock",
+        "src.control.decision_engine",
+        ["DecisionEngine", "ActuationCommand"]
+    )
+    results['Phase 10 (Machine Health)'] = test_phase(
+        10, "Predictive Maintenance Health Scorer",
+        "src.intelligence.health_scorer",
+        ["MachineHealthScorer", "HealthTier"]
+    )
+    results['Phase 10 (TreeSHAP RCA)'] = test_phase(
+        10, "TreeSHAP Explainable RCA Engine",
+        "src.intelligence.rca_engine",
+        ["RCAEngine"]
+    )
+    results['Phase 10 (Golden Signatures)'] = test_phase(
+        10, "Golden Signature Benchmarking",
+        "src.intelligence.golden_signature",
+        ["GoldenSignatureEngine"]
+    )
+    results['Phase 10 (Digital Twin A vs B)'] = test_phase(
+        10, "Dual-State Industrial Digital Twin",
+        "src.digital_twin.twin_engine",
+        ["DigitalTwinEngine"]
     )
     
     # Check data and model files

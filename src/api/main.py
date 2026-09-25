@@ -327,27 +327,291 @@ def db_summary():
 
 
 # =============================================================================
-#  POST /api/sensor-data (Proxy to ESP32 Server)
+#  v2.0 Intelligence & Cyber-Physical Endpoints
 # =============================================================================
 
-@app.post("/api/sensor-data", tags=["Data"])
-async def proxy_sensor_data(request: dict):
+@app.get("/api/machine-health", tags=["v2.0 Intelligence"])
+def get_machine_health(
+    recon_error: float = 0.045,
+    current_rms: float = 12.5,
+    temperature: float = 38.0
+):
     """
-    Proxy endpoint for ESP32 sensor data to port 8001.
-    Forwards sensor data from ESP32 devices to the real-time server.
+    Computes Continuous Machine Health Index (0-100%) and 3 Operational Tiers:
+    NOMINAL (>=75%), DEGRADED (45-74%), CRITICAL (<45%).
     """
-    try:
-        import aiohttp
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                "http://localhost:8001/api/sensor-data",
-                json=request,
-                timeout=aiohttp.ClientTimeout(total=3)
-            ) as resp:
-                return await resp.json()
-    except Exception as e:
-        logger.warning("Sensor data proxy failed: %s" % str(e))
-        return {"status": "forwarded", "message": str(e)}
+    from src.intelligence.health_scorer import MachineHealthScorer
+    scorer = MachineHealthScorer()
+    rep = scorer.evaluate(recon_error=recon_error, current_rms=current_rms, temperature=temperature)
+    return {
+        "health_index": rep.health_index,
+        "tier": rep.tier.value,
+        "recon_penalty": rep.recon_penalty,
+        "current_penalty": rep.current_penalty,
+        "temp_penalty": rep.temp_penalty,
+        "status_summary": rep.status_summary,
+        "action_recommendation": rep.action_recommendation,
+        "color_hex": rep.color_hex,
+        "maintenance_window_hours": rep.maintenance_window_hours
+    }
+
+
+@app.get("/api/rca", tags=["v2.0 Intelligence"])
+def get_root_cause_analysis(
+    temperature: float = 245.0,
+    pressure: float = 4.2,
+    speed: float = 1600.0,
+    feed_rate: float = 1.10,
+    recon_error: float = 0.42
+):
+    """
+    TreeSHAP Explainable Root Cause Analysis.
+    Translates 25-D genome variances into plain-English operator diagnostics.
+    """
+    from src.intelligence.rca_engine import RCAEngine
+    rca = RCAEngine()
+    genome = np.array([
+        temperature, pressure, speed, feed_rate, 45.0,
+        7.85, 200.0, 2.0,
+        0.1, -0.2, 0.3, -0.1, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        250.0
+    ], dtype=np.float32)
+    rep = rca.explain(genome, target_index=0, recon_error=recon_error)
+    return {
+        "target": rep.target_name,
+        "predicted_value": rep.predicted_value,
+        "baseline_value": rep.baseline_value,
+        "primary_driver": rep.primary_driver_text,
+        "plain_english": rep.plain_english_diagnosis,
+        "top_attributions": [
+            {
+                "feature": a.display_name,
+                "value": a.feature_value,
+                "attribution_pct": a.attribution_pct,
+                "direction": a.direction,
+                "interpretation": a.interpretation
+            }
+            for a in rep.top_attributions
+        ]
+    }
+
+
+@app.get("/api/golden-signature", tags=["v2.0 Intelligence"])
+def get_golden_signature(
+    temperature: float = 245.0,
+    pressure: float = 4.2,
+    speed: float = 1600.0,
+    feed_rate: float = 1.10
+):
+    """
+    Golden Signature Nearest-Neighbor Comparator.
+    Calculates prescriptive parameter adjustments to match top 5% historical runs.
+    """
+    from src.intelligence.golden_signature import GoldenSignatureEngine
+    engine = GoldenSignatureEngine()
+    rec = engine.find_nearest_golden_recipe(
+        temperature=temperature,
+        pressure=pressure,
+        speed=speed,
+        feed_rate=feed_rate
+    )
+    return {
+        "nearest_batch_id": rec.nearest_batch_id,
+        "target_yield": rec.target_yield,
+        "target_quality": rec.target_quality,
+        "target_energy": rec.target_energy,
+        "current_params": rec.current_params,
+        "target_params": rec.target_params,
+        "deltas": rec.deltas,
+        "prescriptive_text": rec.prescriptive_text,
+        "similarity_score_pct": rec.similarity_score_pct
+    }
+
+
+@app.post("/api/digital-twin/simulate", tags=["v2.0 Intelligence"])
+def simulate_digital_twin(
+    carbon_intensity: float = 350.0,
+    inject_defect: bool = False,
+    defect_minute: float = 18.0
+):
+    """
+    Dual-State Industrial Digital Twin (Plan A vs Plan B Matrix).
+    Simultaneously computes live comparative economic deltas and sunk energy saved.
+    """
+    from src.digital_twin.twin_engine import DigitalTwinEngine
+    twin = DigitalTwinEngine()
+    comp = twin.compute_dual_state(
+        grid_carbon_intensity=carbon_intensity,
+        defect_injected=inject_defect,
+        defect_minute=defect_minute
+    )
+    return {
+        "plan_a": {
+            "name": comp.plan_a.name,
+            "yield": comp.plan_a.yield_rate,
+            "quality": comp.plan_a.quality_score,
+            "energy_kwh": comp.plan_a.energy_kwh,
+            "carbon_kg": comp.plan_a.carbon_emissions_kg,
+            "scrap_rate_pct": comp.plan_a.scrap_rate_pct
+        },
+        "plan_b": {
+            "name": comp.plan_b.name,
+            "yield": comp.plan_b.yield_rate,
+            "quality": comp.plan_b.quality_score,
+            "energy_kwh": comp.plan_b.energy_kwh,
+            "carbon_kg": comp.plan_b.carbon_emissions_kg,
+            "scrap_rate_pct": comp.plan_b.scrap_rate_pct
+        },
+        "deltas": {
+            "yield_gain_pct": comp.delta_yield_pct,
+            "energy_reduced_pct": comp.delta_energy_pct,
+            "carbon_avoided_pct": comp.delta_carbon_pct,
+            "scrap_energy_preserved_kwh": comp.scrap_energy_preserved_kwh
+        },
+        "economic_summary": comp.economic_benefit_summary,
+        "sunk_report": {
+            "abort_triggered": comp.sunk_report.abort_triggered,
+            "abort_minute": comp.sunk_report.abort_minute,
+            "sunk_energy_saved_kwh": comp.sunk_report.sunk_energy_saved_kwh,
+            "sunk_carbon_avoided_kg": comp.sunk_report.sunk_carbon_avoided_kg,
+            "material_status": comp.sunk_report.material_status,
+            "summary": comp.sunk_report.status_summary
+        } if comp.sunk_report else None
+    }
+
+
+# =============================================================================
+#  Production Continuity & Human-in-the-Loop Endpoints
+# =============================================================================
+
+# In-memory singletons for live API demo session
+from src.services.machine_state import MachineState, SensorReadingContract
+from src.services.production_continuity import ProductionContinuityManager
+from src.services.recovery import RecoveryManager
+from src.services.command_service import CommandService
+from src.safety.safety_rules import SafetyRuleEngine
+
+_live_machine_state = MachineState(
+    machine_id="MACHINE_01",
+    temperature=42.0,
+    humidity=48.0,
+    voltage=230.0,
+    current=12.2,
+    power=2806.0,
+    energy_kwh=112.5,
+    carbon_emissions_kg=28.12,
+    anomaly_score=0.035,
+    health_index=94.5,
+    quality_score=0.94,
+    golden_similarity=96.2,
+    batch_progress_pct=65.0
+)
+_continuity_mgr = ProductionContinuityManager()
+_recovery_mgr = RecoveryManager()
+_command_svc = CommandService()
+_safety_engine = SafetyRuleEngine()
+
+
+@app.get("/api/machine/{machine_id}/state", tags=["Production Continuity"])
+def get_machine_state(machine_id: str):
+    """Returns the unified MachineState (single source of truth)."""
+    if machine_id != _live_machine_state.machine_id and machine_id != "latest":
+        raise HTTPException(status_code=404, detail=f"Machine {machine_id} not registered.")
+    return _live_machine_state.to_dict()
+
+
+@app.post("/api/production-continuity", tags=["Production Continuity"])
+def evaluate_production_continuity(
+    temperature: Optional[float] = None,
+    current_a: Optional[float] = None,
+    health_index: Optional[float] = None,
+    progress_pct: Optional[float] = None,
+    is_sustained_defect: bool = False
+):
+    """
+    Evaluates in-flight production problems: Continue vs Correct vs Controlled Stop vs Resume.
+    Prioritizes safe corrective trimming to prevent unnecessary downtime & sunk batch loss.
+    """
+    if temperature is not None: _live_machine_state.temperature = temperature
+    if current_a is not None: _live_machine_state.current = current_a
+    if health_index is not None: _live_machine_state.health_index = health_index
+    if progress_pct is not None: _live_machine_state.batch_progress_pct = progress_pct
+
+    decision = _continuity_mgr.evaluate_decision(
+        state=_live_machine_state,
+        is_sustained_defect=is_sustained_defect
+    )
+    
+    req_id = None
+    if decision.requires_human_approval:
+        req_id = _command_svc.submit_for_approval(_live_machine_state.machine_id, decision)
+
+    res = decision.to_dict()
+    res["approval_request_id"] = req_id
+    return res
+
+
+@app.post("/api/approval", tags=["Production Continuity"])
+def operator_approval(request_id: str, approve: bool, operator_id: str = "OPERATOR_01"):
+    """
+    Human-in-the-loop interface: Operator APPROVES or REJECTS an AI process recommendation.
+    Approved commands are re-validated by the Safety Rule Engine before physical dispatch.
+    """
+    success, msg = _command_svc.process_operator_action(
+        request_id=request_id,
+        approve=approve,
+        operator_id=operator_id
+    )
+    if not success:
+        return {"status": "BLOCKED_OR_FAILED", "message": msg}
+    return {"status": "SUCCESS", "message": msg}
+
+
+@app.post("/api/resume", tags=["Production Continuity"])
+def resume_production_endpoint(machine_id: str = "MACHINE_01"):
+    """
+    Executes pre-flight verification and resumes production from valid saved checkpoint.
+    """
+    verif = _recovery_mgr.verify_pre_flight(
+        machine_id=machine_id,
+        current_temp=_live_machine_state.temperature,
+        current_a=_live_machine_state.current
+    )
+    success, msg = _recovery_mgr.resume_production(machine_id, _live_machine_state, verif)
+    return {
+        "resumed": success,
+        "message": msg,
+        "verification": {
+            "ready_to_resume": verif.ready_to_resume,
+            "notes": verif.verification_notes
+        }
+    }
+
+
+@app.get("/api/machine/{machine_id}/recovery-state", tags=["Production Continuity"])
+def get_recovery_state(machine_id: str):
+    """Fetches saved checkpoint context and pre-flight readiness for a machine."""
+    chk = _recovery_mgr._active_checkpoints.get(machine_id)
+    verif = _recovery_mgr.verify_pre_flight(
+        machine_id=machine_id,
+        current_temp=_live_machine_state.temperature,
+        current_a=_live_machine_state.current
+    )
+    return {
+        "has_active_checkpoint": chk is not None,
+        "checkpoint": {
+            "checkpoint_id": chk.checkpoint_id,
+            "batch_id": chk.batch_id,
+            "batch_progress_pct": chk.batch_progress_pct,
+            "elapsed_minutes": chk.elapsed_minutes,
+            "energy_kwh": chk.energy_kwh_accumulated,
+            "stop_reason": chk.stop_reason
+        } if chk else None,
+        "pre_flight_readiness": verif.ready_to_resume,
+        "verification_notes": verif.verification_notes
+    }
+
 
 
 # =============================================================================

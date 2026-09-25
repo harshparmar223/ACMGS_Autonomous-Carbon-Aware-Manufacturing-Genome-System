@@ -154,6 +154,23 @@ def create_tables():
                 started_at  TEXT,
                 finished_at TEXT DEFAULT (datetime('now'))
             );
+
+            -- Phase 10 / v2.0: Cyber-Physical Actuator & Decision Logs
+            CREATE TABLE IF NOT EXISTS actuator_logs (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp         TEXT DEFAULT (datetime('now')),
+                temperature       REAL,
+                current_rms       REAL,
+                recon_error       REAL,
+                predicted_quality REAL,
+                pwm_duty          INTEGER,
+                fan_speed_pct     REAL,
+                feed_hold         INTEGER,
+                status            TEXT,
+                sunk_energy_kwh   REAL,
+                sunk_carbon_kg    REAL,
+                reason            TEXT
+            );
         """)
     logger.info("Database tables created/verified at %s", DB_PATH)
 
