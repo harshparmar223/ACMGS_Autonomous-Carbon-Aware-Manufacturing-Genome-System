@@ -71,6 +71,8 @@ class SensorData(BaseModel):
     temperature: float
     humidity: float
     current: float
+    voltage: Optional[float] = 230.0
+    power: Optional[float] = 0.0
     pressure: Optional[float] = 5.2
     speed: Optional[float] = 1850.0
     feed_rate: Optional[float] = 0.85
@@ -78,6 +80,7 @@ class SensorData(BaseModel):
     timestamp: Optional[int] = None
     rssi: Optional[int] = None
     ip: Optional[str] = None
+    node: Optional[int] = 1
 
 
 class ActuationRequest(BaseModel):
@@ -104,6 +107,7 @@ class EdgeBrainState:
         self.latest_health: Dict[str, Any] = {}
         self.latest_actuation: Dict[str, Any] = {}
         self.active_websockets: List[WebSocket] = []
+        self.override_until: float = 0.0
         
         # Warmup buffer with nominal 128 current points
         for _ in range(128):
@@ -272,6 +276,8 @@ def evaluate_stream_inference(data: SensorData) -> Dict[str, Any]:
             "temperature": data.temperature,
             "humidity": data.humidity,
             "current": data.current,
+            "voltage": getattr(data, "voltage", 230.0) or 230.0,
+            "power": getattr(data, "power", 0.0) or round(data.current * (getattr(data, "voltage", 230.0) or 230.0), 1),
             "pressure": data.pressure,
             "speed": data.speed,
             "feed_rate": data.feed_rate,
@@ -294,8 +300,13 @@ def evaluate_stream_inference(data: SensorData) -> Dict[str, Any]:
 # ===== REST API Endpoints =====
 
 @app.post("/api/sensor-data")
+@app.post("/api/data")
 async def post_sensor_data(data: SensorData):
     """Primary telemetry ingestion endpoint from Node 1 (ESP32) or simulator."""
+    if time.time() < state.override_until:
+        # Override lock active for interactive test bench (do not overwrite with idle sensor data)
+        return state.latest_telemetry
+
     result = evaluate_stream_inference(data)
     
     # Broadcast to WebSockets asynchronously
@@ -305,7 +316,56 @@ async def post_sensor_data(data: SensorData):
     return result
 
 
+@app.post("/api/override")
+async def trigger_override(data: SensorData, duration_sec: float = 30.0):
+    """Locks test conditions (e.g. 62°C Thermal Rise or 78.5°C E-Stop) for demonstration."""
+    state.override_until = time.time() + duration_sec
+    result = evaluate_stream_inference(data)
+    if state.active_websockets:
+        asyncio.create_task(broadcast_telemetry(result))
+    return {"status": "OVERRIDE_ACTIVE", "duration_sec": duration_sec, "telemetry": result}
+
+
+@app.post("/api/override/reset")
+async def reset_override():
+    """Clears override and immediately returns to physical hardware sensor reading."""
+    state.override_until = 0.0
+    return {"status": "LIVE_HARDWARE_ACTIVE"}
+
+
+@app.post("/api/actuate")
+async def manual_actuate(req: ActuationRequest):
+    """Direct manual slider control for Fan PWM, Warning, and Emergency Defect Abort."""
+    if req.pwm == 0 and not req.feed_hold:
+        state.override_until = 0.0  # Return to autonomous mode if PWM set to 0
+    else:
+        state.override_until = time.time() + 3600.0  # Persistent 1-hour lock for continuous fan operation
+        
+    state.latest_actuation = {
+        "pwm_duty": req.pwm,
+        "fan_speed_pct": round((req.pwm / 255.0) * 100.0, 1),
+        "feed_hold": req.feed_hold,
+        "status": "EMERGENCY_FEED_HOLD" if req.feed_hold else ("MANUAL_PWM" if req.pwm > 0 else "NOMINAL"),
+        "sunk_energy_saved_kwh": 28.8 if req.feed_hold else 0.0,
+        "sunk_carbon_avoided_kg": 10.08 if req.feed_hold else 0.0,
+        "reason": f"Manual Site Slider: {req.pwm}/255 PWM ({int(req.pwm/255.0*100)}%)" + (" | E-STOP" if req.feed_hold else ""),
+        "windows_confirmed": 2 if req.feed_hold else 0
+    }
+    if isinstance(state.latest_telemetry, dict):
+        state.latest_telemetry["actuation"] = state.latest_actuation
+        
+    return {"status": "OK", "actuation": state.latest_actuation}
+
+
+@app.post("/api/baseline-fan")
+async def set_baseline_fan(pwm: int = 80):
+    """Sets continuous baseline fan circulation speed even under normal cold temperatures."""
+    state.decision_engine.min_baseline_pwm = pwm
+    return {"status": "OK", "min_baseline_pwm": pwm}
+
+
 @app.get("/api/telemetry/latest")
+@app.get("/api/latest")
 async def get_latest_telemetry():
     """Returns the most recent processed telemetry state."""
     if not state.latest_telemetry:

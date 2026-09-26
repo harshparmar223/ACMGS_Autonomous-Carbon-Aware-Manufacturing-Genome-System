@@ -2240,18 +2240,32 @@ with tab8:
     st.markdown('<div class="slabel">🌐 Edge Bridge Connection & Live Stream Status</div>', unsafe_allow_html=True)
     
     server_online = False
-    server_port = 8000
+    server_port = 8001
     try:
-        r_test = requests.get("http://localhost:8000/health", timeout=0.4)
-        if r_test.status_code == 200:
+        r_live = requests.get("http://localhost:8001/api/latest", timeout=0.5)
+        if r_live.status_code == 200:
             server_online = True
-            server_port = 8000
+            server_port = 8001
+            live_payload = r_live.json()
+            sensor_dict = live_payload.get("sensor", {})
+            if sensor_dict:
+                st.session_state.esp_temp = float(sensor_dict.get("temperature", st.session_state.esp_temp))
+                st.session_state.esp_hum = float(sensor_dict.get("humidity", st.session_state.esp_hum))
+                st.session_state.esp_curr = float(sensor_dict.get("current", st.session_state.esp_curr))
+                if "voltage" in sensor_dict and sensor_dict["voltage"]:
+                    st.session_state.esp_volt = float(sensor_dict.get("voltage", st.session_state.esp_volt))
+            if "energy_dna" in live_payload:
+                st.session_state.esp_recon = float(live_payload["energy_dna"].get("recon_error", st.session_state.esp_recon))
+            st.session_state.esp_packet_count += 1
+            if len(st.session_state.esp_waveform) >= 128:
+                st.session_state.esp_waveform.pop(0)
+            st.session_state.esp_waveform.append(st.session_state.esp_curr)
     except Exception:
         try:
-            r_test2 = requests.get("http://localhost:8001/api/health", timeout=0.4)
-            if r_test2.status_code == 200:
+            r_test = requests.get("http://localhost:8000/health", timeout=0.4)
+            if r_test.status_code == 200:
                 server_online = True
-                server_port = 8001
+                server_port = 8000
         except Exception:
             server_online = False
 
@@ -2264,10 +2278,10 @@ with tab8:
                 <div style="font-size:1.6rem;">{'🟢' if server_online else '🟡'}</div>
                 <div>
                     <div style="font-size:0.9rem;font-weight:700;color:{'#00ff88' if server_online else '#ffd600'};">
-                        {'● Edge Server Bridge Active (:' + str(server_port) + ')' if server_online else '○ Edge Simulator Standby (Direct Bridge)'}
+                        {'● Edge Server Bridge Active (:' + str(server_port) + ')' if server_online else '○ Edge Simulator Standby'}
                     </div>
-                    <div style="font-size:0.75rem;color:rgba(255,255,255,0.6);">
-                        DHT11 (GPIO 4) & ACS712 (GPIO 34) ➔ Solid-State MOSFET (GPIO 18)
+                    <div style="font-size:0.75rem;color:rgba(255,255,255,0.7);">
+                        Target: <code style="color:#00d4ff;">http://10.206.165.55:8001/api/data</code> (SSID: <b>Harsh</b>)
                     </div>
                 </div>
             </div>
@@ -2293,13 +2307,23 @@ with tab8:
         )
 
     with c_stat3:
+        auto_refresh = st.toggle("🔴 Auto-Stream Live (1s)", value=False, key="esp_auto_stream_toggle")
         if st.button("⚡ Poll Live Hardware", use_container_width=True):
-            st.session_state.esp_packet_count += 1
-            # Add slight fluctuation
-            st.session_state.esp_curr = max(0.0, st.session_state.esp_curr + float(np.random.normal(0, 0.2)))
-            st.session_state.esp_temp = max(20.0, st.session_state.esp_temp + float(np.random.normal(0, 0.1)))
-            st.session_state.esp_waveform.pop(0)
-            st.session_state.esp_waveform.append(st.session_state.esp_curr)
+            try:
+                r_live = requests.get("http://localhost:8001/api/latest", timeout=0.8)
+                if r_live.status_code == 200:
+                    live_payload = r_live.json()
+                    sensor_dict = live_payload.get("sensor", {})
+                    if sensor_dict:
+                        st.session_state.esp_temp = float(sensor_dict.get("temperature", st.session_state.esp_temp))
+                        st.session_state.esp_hum = float(sensor_dict.get("humidity", st.session_state.esp_hum))
+                        st.session_state.esp_curr = float(sensor_dict.get("current", st.session_state.esp_curr))
+                        if "voltage" in sensor_dict and sensor_dict["voltage"]:
+                            st.session_state.esp_volt = float(sensor_dict.get("voltage", st.session_state.esp_volt))
+                    if "energy_dna" in live_payload:
+                        st.session_state.esp_recon = float(live_payload["energy_dna"].get("recon_error", st.session_state.esp_recon))
+            except Exception:
+                pass
             st.rerun()
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -2309,9 +2333,9 @@ with tab8:
     
     st_c1, st_c2, st_c3, st_c4, st_c5, st_c6 = st.columns(6)
     with st_c1:
-        st.metric("Chamber Temp", f"{st.session_state.esp_temp:.1f}°C", "DHT11 (GPIO 4)")
+        st.metric("Chamber Temp", f"{st.session_state.esp_temp:.1f}°C", "DHT11 (GPIO 32)")
     with st_c2:
-        st.metric("Humidity", f"{st.session_state.esp_hum:.1f}%", "DHT11 (GPIO 4)")
+        st.metric("Humidity", f"{st.session_state.esp_hum:.1f}%", "DHT11 (GPIO 32)")
     with st_c3:
         st.metric("Spindle Current", f"{st.session_state.esp_curr:.1f} A", "ACS712 (GPIO 34)",
                   delta_color="inverse" if st.session_state.esp_curr > 25.0 else "normal")
@@ -2319,7 +2343,7 @@ with tab8:
         p_watt = st.session_state.esp_curr * st.session_state.esp_volt
         st.metric("Spindle Power", f"{p_watt/1000.0:.2f} kW", f"{p_watt:.0f} W Active")
     with st_c5:
-        st.metric("Line Voltage", f"{st.session_state.esp_volt:.1f} V", "Single Phase AC")
+        st.metric("Line Voltage", f"{st.session_state.esp_volt:.1f} V", "Sensor (GPIO 35)")
     with st_c6:
         st.metric("LSTM Recon Error", f"{st.session_state.esp_recon:.4f}", "3σ Limit = 0.1991",
                   delta_color="inverse" if st.session_state.esp_recon > 0.199084 else "normal")
@@ -2452,8 +2476,56 @@ with tab8:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # ── Section 5: Interactive Edge Disturbance Injection ────────────────────
-    st.markdown('<div class="slabel">🧪 Interactive Edge Disturbance Injection & Hardware Test Bench</div>', unsafe_allow_html=True)
+    # ── Section 5: Interactive Real-Time Hardware Sliders & Controls ──────────
+    st.markdown('<div class="slabel">🎛️ Live Hardware Actuator & Temperature Sliders (Direct Site Control)</div>', unsafe_allow_html=True)
+    
+    col_sl1, col_sl2, col_sl3 = st.columns([5, 5, 2])
+    with col_sl1:
+        manual_temp = st.slider("🌡️ Chamber Temperature Control (°C)", min_value=25.0, max_value=85.0, value=float(st.session_state.esp_temp), step=1.0, key="slider_manual_temp")
+        if st.button("🔥 Send Temperature to Hardware", use_container_width=True):
+            st.session_state.esp_temp = manual_temp
+            try:
+                requests.post("http://localhost:8001/api/override", json={
+                    "temperature": manual_temp,
+                    "humidity": st.session_state.esp_hum,
+                    "current": st.session_state.esp_curr,
+                    "voltage": st.session_state.esp_volt
+                }, timeout=0.5)
+            except Exception: pass
+            st.rerun()
+
+    with col_sl2:
+        manual_pwm = st.slider("⚡ Direct Fan PWM Speed (0 - 255)", min_value=0, max_value=255, value=int(act_out.fan_pwm_duty), step=5, key="slider_manual_pwm")
+        col_fb1, col_fb2 = st.columns(2)
+        with col_fb1:
+            if st.button("🌀 Run Fan Continuously", use_container_width=True):
+                try:
+                    requests.post("http://localhost:8001/api/actuate", json={"pwm": max(manual_pwm, 100), "feed_hold": False}, timeout=0.5)
+                except Exception: pass
+                st.rerun()
+        with col_fb2:
+            if st.button("🔄 Set Baseline Idle Speed", use_container_width=True):
+                try:
+                    requests.post(f"http://localhost:8001/api/baseline-fan?pwm={manual_pwm}", timeout=0.5)
+                except Exception: pass
+                st.rerun()
+
+    with col_sl3:
+        st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+        if st.button("🚨 E-STOP", type="primary", use_container_width=True):
+            try:
+                requests.post("http://localhost:8001/api/actuate", json={"pwm": 0, "feed_hold": True}, timeout=0.5)
+            except Exception: pass
+            st.rerun()
+        if st.button("🔄 Reset Idle", use_container_width=True):
+            try:
+                requests.post("http://localhost:8001/api/override/reset", timeout=0.5)
+                requests.post("http://localhost:8001/api/actuate", json={"pwm": 150, "feed_hold": False, "reset": True}, timeout=0.5)
+            except Exception: pass
+            st.rerun()
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown('<div class="slabel">🧪 One-Click Edge Disturbance Scenarios</div>', unsafe_allow_html=True)
     
     eb1, eb2, eb3, eb4 = st.columns(4)
     with eb1:
@@ -2465,6 +2537,9 @@ with tab8:
             st.session_state.esp_qual = 0.95
             st.session_state.esp_mode_desc = "Nominal Steady State: Fan idle (PWM 0), machine nominal."
             st.session_state.esp_waveform = list(np.random.normal(12.2, 0.3, 128))
+            try:
+                requests.post("http://localhost:8001/api/override/reset", timeout=0.5)
+            except Exception: pass
             st.rerun()
 
     with eb2:
@@ -2476,6 +2551,9 @@ with tab8:
             st.session_state.esp_qual = 0.88
             st.session_state.esp_mode_desc = "Thermal Rise: Closed-loop MOSFET modulating fan at 199/255 PWM."
             st.session_state.esp_waveform = list(np.random.normal(15.5, 0.5, 128))
+            try:
+                requests.post("http://localhost:8001/api/override", json={"temperature": 62.0, "humidity": 42.0, "current": 15.5, "voltage": 230.0}, timeout=0.5)
+            except Exception: pass
             st.rerun()
 
     with eb3:
@@ -2489,6 +2567,9 @@ with tab8:
             wf = list(np.random.normal(12.2, 0.3, 128))
             wf[-1] = 30.0
             st.session_state.esp_waveform = wf
+            try:
+                requests.post("http://localhost:8001/api/override", json={"temperature": 45.0, "humidity": 46.0, "current": 30.0, "voltage": 230.0}, timeout=0.5)
+            except Exception: pass
             st.rerun()
 
     with eb4:
@@ -2500,6 +2581,11 @@ with tab8:
             st.session_state.esp_qual = 0.28
             st.session_state.esp_mode_desc = "Irreversible Defect: 2 consecutive windows confirmed. Sunk-Energy Abort (<20ms load shed)!"
             st.session_state.esp_waveform = list(np.random.normal(32.5, 1.2, 128))
+            try:
+                # Post twice to trigger Dual-Window confirmation
+                requests.post("http://localhost:8001/api/override", json={"temperature": 78.5, "humidity": 35.0, "current": 32.5, "voltage": 230.0}, timeout=0.5)
+                requests.post("http://localhost:8001/api/override", json={"temperature": 78.5, "humidity": 35.0, "current": 32.5, "voltage": 230.0}, timeout=0.5)
+            except Exception: pass
             st.rerun()
 
     # ── Section 6: Live SQLite Actuator Event Logs ────────────────────────────
@@ -2514,5 +2600,10 @@ with tab8:
             st.info("Actuator logs initialized and streaming from live runs.")
     except Exception:
         st.info("Actuator logs stream ready.")
+
+    # Auto-Stream Live Refresh Loop
+    if st.session_state.get("esp_auto_stream_toggle", False):
+        time.sleep(1.0)
+        st.rerun()
 
 

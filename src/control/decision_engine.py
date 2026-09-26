@@ -92,13 +92,15 @@ class DecisionEngine:
         quality_abort_threshold: float = 0.40,
         temp_nominal_limit: float = 45.0,
         temp_critical_limit: float = 70.0,
-        db_path: str = DB_PATH
+        db_path: str = DB_PATH,
+        min_baseline_pwm: int = 0
     ):
         self.recon_threshold = recon_threshold
         self.quality_abort_threshold = quality_abort_threshold
         self.temp_nominal_limit = temp_nominal_limit
         self.temp_critical_limit = temp_critical_limit
         self.db_path = db_path
+        self.min_baseline_pwm = min_baseline_pwm
         
         # Dual-Window Safety Guardrail Buffer (tracks consecutive anomalous windows)
         self.consecutive_defect_windows = 0
@@ -108,7 +110,7 @@ class DecisionEngine:
     def compute_proportional_pwm(self, temp: float, emergency_override: bool = False) -> int:
         """
         Proportional Fan Law:
-          PWM = 0                                       if T < 45°C
+          PWM = min_baseline_pwm                        if T < 45°C (continuous baseline circulation)
           PWM = 80 + ((T - 45) / 25) * 175             if 45°C <= T <= 70°C
           PWM = 255                                     if T > 70°C or Emergency Abort
         """
@@ -116,7 +118,7 @@ class DecisionEngine:
             return 255
 
         if temp < self.temp_nominal_limit:
-            return 0
+            return self.min_baseline_pwm
         elif temp > self.temp_critical_limit:
             return 255
         else:
